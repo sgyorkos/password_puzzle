@@ -1,56 +1,72 @@
+import os
 import sys
 
-from PyQt6.QtCore import Qt, QTimer, QUrl
+from PyQt6.QtCore import QPoint, Qt, QTimer, QUrl
+from PyQt6.QtGui import QKeyEvent, QFont
+from PyQt6.QtMultimedia import QMediaPlayer
+from PyQt6.QtMultimediaWidgets import QVideoWidget
 from PyQt6.QtWidgets import (
     QApplication,
     QLabel,
-    QLineEdit,
     QMainWindow,
-    QPushButton,
     QSlider,
     QVBoxLayout,
     QWidget,
 )
-from PyQt6.QtMultimedia import QMediaPlayer
-from PyQt6.QtMultimediaWidgets import QVideoWidget
+
+PASSWORD = os.getenv("PUZZLE_CODE")
 
 
 class PasswordInput(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setGeometry(100, 100, 300, 200)
 
-        self.text_input = QLineEdit(self)
-        # self.text_input.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.text_input.move(20, 20)
-        self.text_input.resize(200, 32)
+        self.password_input = ""
+        self.input_allowed = True
 
-        self.submit = QPushButton("Submit", self)
-        self.submit.move(20, 60)
-        self.submit.clicked.connect(self.submit_text)
+        qr = self.frameGeometry()
+        cp = self.screen().availableGeometry().center()
+        qr.moveCenter(cp)
+        self.move(qr.topLeft())
+        self.cx, self.cy = qr.center().x(), qr.center().y()
+
+        self.label = QLabel("Enter Password:", self)
+        f = self.label.font()
+        f.setPointSize(30)
+        self.label.setFont(f)
+        self.label.adjustSize()
+        self.label.move(self.cx - self.label.width()//2, self.cy - 75)
+
+        self.password_display = QLabel("- - - - - - -", self)
+        f = QFont("Monospace", 30)
+        self.password_display.setFont(f)
+        self.password_display.adjustSize()
+        self.password_display.move(self.cx - self.password_display.width()//2, self.cy)
 
         self.error = QLabel("", self)
-        self.error.move(20, 100)
         self.error.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        f = self.error.font()
+        f.setPointSize(25)
+        self.error.setFont(f)
         self.error.adjustSize()
+        self.error.move(self.cx, self.cy + 75)
+        self.error.setStyleSheet("color: red")
         self.error.setVisible(False)
 
         self.video_player = VideoPlayer(self)
 
     def submit_text(self):
-        text = self.text_input.text()
-        print(f"User entered: {text}")
-        if text.lower() == "qwerty":
+        if self.password_input.lower() == PASSWORD:
             self.video_player.start_video()
         else:
             self.start_error_timer()
 
-    def disable_input(self):
-        self.text_input.setDisabled(True)
-        self.submit.setDisabled(True)
+    def set_input_allowed(self, input_allowed: bool):
+        self.input_allowed = input_allowed
+        self.password_display.setStyleSheet(f"color: {"black" if input_allowed else "grey"}")
 
     def start_error_timer(self):
-        self.disable_input()
+        self.set_input_allowed(False)
         self.timer = QTimer(self)
         self.timer.setInterval(1000)
         self.iterator = 10
@@ -59,21 +75,47 @@ class PasswordInput(QMainWindow):
         self.update_error()
         self.timer.start()
 
-    def enable_input(self):
-        self.text_input.setDisabled(False)
-        self.submit.setDisabled(False)
-
     def update_error(self):
         if self.iterator == 0:
             self.timer.stop()
-            self.text_input.setText("")
-            self.enable_input()
+            self.clear_password_input()
+            self.set_input_allowed(True)
             self.error.setText("")
             self.error.setVisible(False)
         else:
             self.error.setText(f"Password incorrect; please wait {self.iterator} second(s)")
             self.error.adjustSize()
+            self.error.width()
+            self.error.move(self.cx - self.error.width()//2, self.cy + 75)
             self.iterator -= 1
+
+    def add_character(self, char: str):
+        self.password_input = self.password_input + char
+        self.update_password_display()
+        if len(self.password_input) == 7:
+            self.submit_text()
+
+    def remove_last_character(self):
+        self.password_input = self.password_input[:-1]
+        self.update_password_display()
+
+    def clear_password_input(self):
+        self.password_input = ""
+        self.update_password_display()
+
+    def update_password_display(self):
+        padded_password = ("{:-<7}".format(self.password_input))
+        self.password_display.setText(" ".join(padded_password))
+        self.password_display.adjustSize()
+        self.password_display.move(self.cx - self.password_display.width()//2, self.cy)
+
+    def keyReleaseEvent(self, event: QKeyEvent):
+        print(event.key())
+        if self.input_allowed:
+            if event.key() >= 65 and event.key() <= 90:
+                self.add_character(event.text())
+            if event.key() == Qt.Key.Key_Backspace and self.password_input:
+                self.remove_last_character()
 
 
 class VideoPlayer(QWidget):
